@@ -1,57 +1,102 @@
-# Sample Hardhat 3 Project (`node:test` and `viem`)
+# Privacy-Preserving AI Bounty Judge
 
-This project showcases a Hardhat 3 project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+## Overview
 
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+This project implements a privacy-preserving bounty system using a Commit-Reveal scheme.
 
-## Project Overview
+The original bounty system exposed submissions publicly, allowing participants to copy and improve existing answers. This implementation keeps answers hidden during the submission phase by storing only commitment hashes.
 
-This example project includes:
+Participants first submit a commitment hash generated from:
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+keccak256(answer, salt, msg.sender, bountyId)
 
-## Usage
+After the submission phase, participants reveal their answer and salt. The smart contract verifies the commitment before allowing the answer to be considered for AI judging.
 
-### Running Tests
+## Workflow
 
-To run all the tests in the project, execute the following command:
+1. Create Bounty
+   - A bounty owner creates a bounty with a reward.
 
-```shell
-npx hardhat test
-```
+2. Submit Commitment
+   - Participants submit only a commitment hash.
+   - The actual answer remains private.
 
-You can also selectively run the Solidity or `node:test` tests:
+3. Reveal Answer
+   - Participants reveal their answer and salt.
+   - The contract verifies the hash matches the original commitment.
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
-```
+4. AI Judge
+   - Only valid revealed submissions are eligible for AI evaluation.
 
-### Make a deployment to Sepolia
+5. Finalize Winner
+   - The bounty owner selects the winner and transfers the reward.
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+## Smart Contract Functions
 
-To run the deployment to a local chain:
+### submitCommitment()
 
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
+Participants submit:
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+- bountyId
+- commitment hash
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+The contract stores the commitment without revealing the answer.
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+### revealAnswer()
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
+Participants reveal:
 
-After setting the variable, you can run the deployment with the Sepolia network:
+- answer
+- salt
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+The contract checks:
+
+keccak256(answer, salt, msg.sender, bountyId)
+
+against the stored commitment.
+
+### judgeAll()
+
+Runs AI judging on revealed submissions.
+
+### finalizeWinner()
+
+Finalizes the winning submission and transfers the reward.
+
+## Test Plan
+
+### Valid Reveal
+
+- Submit a commitment.
+- Reveal with the correct answer and salt.
+- Expected result: reveal succeeds.
+
+### Invalid Reveal
+
+- Submit a commitment.
+- Reveal with incorrect salt or answer.
+- Expected result: transaction fails.
+
+### Double Reveal
+
+- Reveal the same submission twice.
+- Expected result: transaction fails.
+
+### Judge Before Reveal
+
+- Attempt AI judging before any valid reveal.
+- Expected result: transaction fails.
+
+## Architecture Note
+
+The blockchain stores bounty information, commitment hashes, and verified revealed answers.
+
+Before reveal, plaintext answers exist only with participants and are not stored on-chain.
+
+After reveal, the verified answers become available for AI judging.
+
+The AI system evaluates submissions after verification, while final winner selection remains controlled by the bounty owner.
+
+## Reflection
+
+In a bounty system, public information should include bounty rules, reward amounts, and judging criteria. Private information should include participant answers before the reveal phase. Commitment hashes protect submissions from being copied by other participants. AI should evaluate objective factors such as quality and relevance. Human decisions should remain for subjective judgment and final approval. A fair bounty system requires both transparency and privacy.
